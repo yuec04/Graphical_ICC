@@ -71,71 +71,118 @@ theta_old <- matrix(rep(.1, D*Kb),D, Kb)
 psi_old <- matrix(rep(.1, D*Kw), D, Kw)
 set.seed(0822)
 xi <- matrix(rnorm(D*sum(J)), sum(J),D)
+EM_iter <- 0
 
-# Step 2: Posterior mean and variance step
-# test i=1
-i <- 1
-Ji <- which(unlist(mapply(rep,1:I,J))==i)
-xi_i <- xi[Ji,]
-X_i <- X[Ji,]
-
-H_i <- diag(1,Kb)-2*matrix(rowSums(apply(rbind(lambda_f(xi_i),t(theta_old)), 2, function(x){
-  as.vector(sum(x[1:J[i]])*x[-c(1:J[i])]%o%x[-c(1:J[i])])
-} )),Kb,Kb)
-
-G_i <- NULL
-B_i <- NULL
-g_i <- NULL
-for(j in 1:J[i]){
-  G_ij <- as.vector(diag(1,Kw))- 2*rowSums(apply(rbind(lambda_f(xi_i[j,]),t(theta_old)), 2, function(x){
-    as.vector(x[1]*x[-1]%o%x[-1])
-  }))
-  G_i <- rbind(G_i, G_ij)
-  B_ij <- rowSums(apply(rbind(lambda_f(xi_i[j,]),t(theta_old),t(psi_old)), 2, function(x){
-    as.vector(x[1]*x[2:(1+Kb)]%o%x[(2+Kb):(1+Kb+Kw)])
-  }))
-  B_i <- rbind(B_i, B_ij)
-  g_ij <- rowSums(apply(cbind(X_i[j,]-.5+2*lambda_f(xi_i[j,])*mu_old, theta_old), 1, function(x){
-    x[1]*x[-1]
+while(EM_iter < 30){
+  T1 <- 0
+  T2 <- 0
+  for (e_step_rep in 1:2){
+    for (i in 1:I){
+      Ji <- which(unlist(mapply(rep,1:I,J))==i)
+      xi_i <- xi[Ji,]
+      X_i <- X[Ji,]
+      
+      H_i <- diag(1,Kb)-2*matrix(rowSums(apply(rbind(lambda_f(xi_i),t(theta_old)), 2, function(x){
+        as.vector(sum(x[1:J[i]])*x[-c(1:J[i])]%o%x[-c(1:J[i])])
+      } )),Kb,Kb)
+      
+      G_i <- NULL
+      B_i <- NULL
+      g_i <- NULL
+      for(j in 1:J[i]){
+        G_ij <- as.vector(diag(1,Kw))- 2*rowSums(apply(rbind(lambda_f(xi_i[j,]),t(theta_old)), 2, function(x){
+          as.vector(x[1]*x[-1]%o%x[-1])
+        }))
+        G_i <- rbind(G_i, G_ij)
+        B_ij <- rowSums(apply(rbind(lambda_f(xi_i[j,]),t(theta_old),t(psi_old)), 2, function(x){
+          as.vector(x[1]*x[2:(1+Kb)]%o%x[(2+Kb):(1+Kb+Kw)])
+        }))
+        B_i <- rbind(B_i, B_ij)
+        g_ij <- rowSums(apply(cbind(X_i[j,]-.5+2*lambda_f(xi_i[j,])*mu_old, theta_old), 1, function(x){
+          x[1]*x[-1]
+        }
+        ))
+        g_i <- rbind(g_i, g_ij)
+      }
+      h_i <- rowSums(apply(cbind(colSums(X_i - .5 + 2 * t(t(lambda_f(xi_i)) * mu_old)), theta_old ), 1, function(x){
+        x[1]*x[-1]
+      }))
+      
+      # Now we are calculating the inverse of C_i
+      diag_paste <- function(A, B){
+        if(!is.null(A)){
+          rbind(cbind(A, matrix(0, dim(A)[1], dim(B)[2])), cbind(matrix(0, dim(B)[1], dim(A)[2]), B))
+        } else {
+          return(B)
+        }
+      }
+      DD_inv <- NULL
+      DD <- NULL
+      B <- NULL
+      m1_i <- h_i
+      for (j in 1:J[i]){
+        DD_inv <- diag_paste(DD_inv, solve(matrix(G_i[j,],Kw, Kw)))
+        DD <- diag_paste(DD, matrix(G_i[j,],Kw, Kw))
+        B <- cbind(B, matrix(B_i[j,], Kb, Kw))  
+        m1_i <- c(m1_i, g_i[j,])
+      }
+      Cinv_tl <- solve(H_i- B %*% DD_inv %*% t(B))
+      Cinv_tr <- -Cinv_tl%*%B%*%DD_inv
+      Cinv_br <- DD_inv + DD_inv%*%t(B)%*%Cinv_tl%*%B%*%DD
+      m_i <- rbind(cbind(Cinv_tl, Cinv_tr), cbind(t(Cinv_tr),Cinv_br)) %*% matrix(m1_i, length(m1_i),1)
+      
+      # Step 3: Updating xi_i
+      if(e_step_rep==1){
+        VVi <- Cinv_tl + m_i[1:Kb] %o% m_i[1:Kb]
+        for (j in 1:J[i]){
+          j_index <- (Kw*(j-1)+1):(Kw*j)
+          UUij <- Cinv_br[j_index,j_index] + m_i[Kb+j_index] %o% m_i[Kb+j_index]
+          UVij <- Cinv_tr[, j_index] + m_i[1:Kb] %o% m_i[Kb+j_index]
+          xi_i[j,] <- (diag(theta_old %*% VVi %*% t(theta_old)) + diag(psi_old %*% UUij %*% t(psi_old)) + 
+                         2* diag(theta_old %*% UVij %*% t(psi_old)) + c(2*mu_old*theta_old%*%matrix(m_i[1:Kb],Kb,1)) + 
+                         c(2* mu_old * psi_old %*% matrix(m_i[Kb+j_index], Kw, 1)) + mu_old^2)^.5
+        }
+      } else {
+        VVi <- Cinv_tl + m_i[1:Kb] %o% m_i[1:Kb]
+        for (j in 1:J[i]){
+          j_index <- (Kw*(j-1)+1):(Kw*j)
+          UUij <- Cinv_br[j_index,j_index] + m_i[Kb+j_index] %o% m_i[Kb+j_index]
+          UVij <- Cinv_tr[, j_index] + m_i[1:Kb] %o% m_i[Kb+j_index]
+          xi_i[j,] <- (diag(theta_old %*% VVi %*% t(theta_old)) + diag(psi_old %*% UUij %*% t(psi_old)) + 
+                         2* diag(theta_old %*% UVij %*% t(psi_old)) + c(2*mu_old*theta_old%*%matrix(m_i[1:Kb],Kb,1)) + 
+                         c(2* mu_old * psi_old %*% matrix(m_i[Kb+j_index], Kw, 1)) + mu_old^2)^.5
+          curr_mat <- rbind(cbind(UUij, UVij, m_i[1:Kb]), cbind(UVij, VVi, m_i[Kb+j_index]), c(m_i[Kb+j_index], m_i[1:Kb], 1))
+          curr_mat_D <- c(curr_mat) %o% lambda_f(xi_i[j,])
+          curr_vec <- curr_mat[,Kb+Kw+1]
+          curr_vec_D <- curr_vec %o% (X_i[j,]-0.5)
+          T1 <- T1 + curr_mat_D
+          T2 <- T2 + curr_vec_D
+        }
+      }
+    }
   }
-                ))
-  g_i <- rbind(g_i, g_ij)
-}
-h_i <- rowSums(apply(cbind(colSums(X_i - .5 + 2 * t(t(lambda_f(xi_i)) * mu_old)), theta_old ), 1, function(x){
-  x[1]*x[-1]
-}))
-
-# Now we are calculating the inverse of C_i
-diag_paste <- function(A, B){
-  if(!is.null(A)){
-    rbind(cbind(A, matrix(0, dim(A)[1], dim(B)[2])), cbind(matrix(0, dim(B)[1], dim(A)[2]), B))
-  } else {
-    return(B)
+  
+  # M-step
+  
+  phi_new <- NULL
+  for (d in 1:D){
+    phi_est <- c(-solve(2*matrix(T1[,d], Kb+Kw+1, Kb+Kw+1))%*%T2[,d])
+    phi_new <- rbind(phi_new, phi_est)
   }
+  mu_new <- c(phi_new[,Kb+Kw+1])
+  theta_new <- phi_new[,((Kw+1):(Kw+Kb))]
+  psi_new <- phi_new[,(1:Kw)]
+  
+  # get the error
+  error <- sum((mu_new-mu_old)^2)+sum((theta_new-theta_old)^2) + sum((psi_new-psi_old)^2)
+  cat("EM Iteration No.",EM_iter,'.\n') 
+  cat("The current error is ", error, '.\n')
+  
+  # Update the parameter estimate
+  mu_old <- mu_new
+  theta_old <- theta_new
+  psi_old <- psi_new
+  EM_iter <- EM_iter + 1
 }
-D_inv <- NULL
-D <- NULL
-B <- NULL
-m1_i <- h_i
-for (j in 1:J[i]){
-  D_inv <- diag_paste(D_inv, solve(matrix(G_i[j,],Kw, Kw)))
-  D <- diag_paste(D, matrix(G_i[j,],Kw, Kw))
-  B <- cbind(B, matrix(B_i[j,], Kb, Kw))  
-  m1_i <- c(m1_i, g_i[j,])
-}
-Cinv_tl <- solve(H_i- B %*% D_inv %*% t(B))
-Cinv_tr <- -Cinv_tl%*%B%*%D_inv
-Cinv_br <- D_inv + D_inv%*%t(B)%*%Cinv_tl%*%B%*%D
-m_i <- rbind(cbind(Cinv_tl, Cinv_tr), cbind(t(Cinv_tr),Cinv_br)) %*% matrix(m1_i, length(m1_i),1)
 
-# Now updating xi_i
-VVi <- Cinv_tl + m_i[1:Kb] %o% m_i[1:Kb]
-for (j in 1:J[i]){
-  j_index <- (Kw*(j-1)+1):(Kw*j)
-  UUij <- Cinv_br[j_index,j_index] + m_i[Kb+j_index] %o% m_i[Kb+j_index]
-  UVij <- Cinv_tr[, j_index] + m_i[1:Kb] %o% m_i[Kb+j_index]
-  xi_i[j,] <- (diag(theta_old %*% VVi %*% t(theta_old)) + diag(psi_old %*% UUij %*% t(psi_old)) + 
-    2* diag(theta_old %*% UVij %*% t(psi_old)) + c(2*mu_old*theta_old%*%matrix(m_i[1:Kb],Kb,1)) + 
-    c(2* mu_old * psi_old %*% matrix(m_i[Kb+j_index], Kw, 1)) + mu_old^2)^.5
-}
 
