@@ -2,7 +2,7 @@
 # 2/05/2014
 
 # Generate a test data
-D <- 8
+D <- 100
 
 # define the true mu
 mu_true <- rep(0, D)
@@ -24,7 +24,7 @@ psi_true <- cbind(psi1_true, psi2_true)
 # generate standard normal scores,
 # between subject score V: dimension is I by K1
 # within subject score U: dimension is (sum Ji) by K2
-I <- 300
+I <- 500
 set.seed(0822)
 J <- rep(2, I)
 V <- matrix(rnorm(I*K1), I, K1)
@@ -84,6 +84,7 @@ diag_paste <- function(A, B){
 while(EM_iter < 30){
   T1 <- 0
   T2 <- 0
+  post <- NULL
   for (e_step_rep in 1:2){
     for (i in 1:I){
       Ji <- which(unlist(mapply(rep,1:I,J))==i)
@@ -150,15 +151,17 @@ while(EM_iter < 30){
           xi_i[j,] <- (diag(theta_old %*% VVi %*% t(theta_old)) + diag(psi_old %*% UUij %*% t(psi_old)) + 
                          2* diag(theta_old %*% UVij %*% t(psi_old)) + c(2*mu_old*(theta_old%*%matrix(m_i[1:Kb],Kb,1))) + 
                          c(2* mu_old * (psi_old %*% matrix(m_i[Kb+j_index], Kw, 1))) + mu_old^2)^.5
-          curr_mat <- rbind(cbind(UUij, UVij, m_i[Kb+j_index]), cbind(UVij, VVi, m_i[1:Kb]), c(m_i[Kb+j_index], m_i[1:Kb], 1))
+          curr_mat <- rbind(cbind(UUij, t(UVij), m_i[Kb+j_index]), cbind(UVij, VVi, m_i[1:Kb]), c(m_i[Kb+j_index], m_i[1:Kb], 1))
           curr_mat_D <- c(curr_mat) %o% lambda_f(xi_i[j,])
           curr_vec <- curr_mat[,Kb+Kw+1]
           curr_vec_D <- curr_vec %o% (X_i[j,]-0.5)
           T1 <- T1 + curr_mat_D
           T2 <- T2 + curr_vec_D
         }
+        post <- rbind(post, c(m_i))
       }
       xi[Ji,] <- xi_i
+      
     }
   }
   
@@ -185,4 +188,24 @@ while(EM_iter < 30){
   EM_iter <- EM_iter + 1
 }
 
+# test the generated latent variable
+mu_est_expand <- matrix(rep(mu_new, each=sum(J)), sum(J), D)
+V_est_expand <- t(matrix(unlist(apply(cbind(post[,1:Kb],J), 1, function(x){
+  matrix(rep(x[1:K1], times=x[K1+1]),K1,x[K1+1])
+})), Kb, sum(J)))
+U_est_expand <- NULL
+for(i in 1:I){
+  U_est_expand <- rbind(U_est_expand, t(matrix(post[i,-c(1:Kb)], Kw, J[i])))
+}
+bet_est_expand <- V_est_expand %*% t(theta_new)
+wit_est_expand <- U_est_expand %*% t(psi_new)
+recon <- mu_est_expand + bet_est_expand + wit_est_expand
 
+# Simulation result illustration
+# Plot the reconstruction probability versus the true probability
+
+library(ggplot2)
+
+qplot(c(latent), c(sigma_f(recon)), xlab='True Probability', 
+      ylab='Estimated probability', main='Simulation results', col=2
+      )
