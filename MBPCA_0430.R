@@ -11,27 +11,27 @@ mu_true <- rep(0, D)
 # theta is the between subject pc
 K1 <- 2
 theta1_true <- c(rep(1,D/2),rep(-1,D/2))
-theta2_true <- c(rep(1,D/4),rep(-1,D/4),rep(1,D/4),rep(-1,D/4))
+theta2_true <- c(rep(.5,D/4),rep(-.5,D/4),rep(.5,D/4),rep(-.5,D/4))
 theta_true <- cbind(theta1_true,theta2_true)
 
 # define the true psi, psi is dimension D by K2
 # psi is the within subject pc
 K2 <- 2
-psi1_true <- rep(.2,D)
-psi2_true <- seq(-.5,.5,length.out=D)
+psi1_true <- rep(0.4,D)
+psi2_true <- seq(-.3,.3,length.out=D)
 psi_true <- cbind(psi1_true, psi2_true)
 
 # generate standard normal scores,
 # between subject score V: dimension is I by K1
 # within subject score U: dimension is (sum Ji) by K2
-I <- 100
+I <- 300
 set.seed(0822)
-J <- floor(runif(I,5,10))
+J <- rep(2, I)
 V <- matrix(rnorm(I*K1), I, K1)
 U <- matrix(rnorm(sum(J)*K2), sum(J), K2)
 V_expand <- t(matrix(unlist(apply(cbind(V,J), 1, function(x){
   matrix(rep(x[1:K1], times=x[K1+1]),K1,x[K1+1])
-})),2, sum(J)))
+})), K1, sum(J)))
 
 # generate the latent variable dimension is sum(Ji) by D
 bet_sub <- t(theta_true %*% t(V_expand))
@@ -45,6 +45,7 @@ lambda_f <- function(x){
 }
 latent <- sigma_f(mu_expand+wit_sub+bet_sub)
 
+# test 
 # generate data X, dimension sum(Ji) by D
 X <- matrix(rbinom(sum(J)*D, 1, as.vector(latent)), sum(J), D)
 
@@ -67,11 +68,18 @@ Kw <- 2 # number of pc within
 # Step 1: Initialize
 # initialize mu, theta, psi, xi
 mu_old <- rep(.1, D)
-theta_old <- matrix(rep(.1, D*Kb),D, Kb)
-psi_old <- matrix(rep(.1, D*Kw), D, Kw)
 set.seed(0822)
+theta_old <- matrix(rnorm(D*Kb, 0, 1),D, Kb)
+psi_old <- matrix(rnorm(D*Kw, 0, 0.1), D, Kw)
 xi <- matrix(rnorm(D*sum(J)), sum(J),D)
 EM_iter <- 0
+diag_paste <- function(A, B){
+  if(!is.null(A)){
+    rbind(cbind(A, matrix(0, dim(A)[1], dim(B)[2])), cbind(matrix(0, dim(B)[1], dim(A)[2]), B))
+  } else {
+    return(B)
+  }
+}
 
 while(EM_iter < 30){
   T1 <- 0
@@ -98,7 +106,7 @@ while(EM_iter < 30){
           as.vector(x[1]*x[2:(1+Kb)]%o%x[(2+Kb):(1+Kb+Kw)])
         }))
         B_i <- rbind(B_i, B_ij)
-        g_ij <- rowSums(apply(cbind(X_i[j,]-.5+2*lambda_f(xi_i[j,])*mu_old, theta_old), 1, function(x){
+        g_ij <- rowSums(apply(cbind(X_i[j,]-.5+2*lambda_f(xi_i[j,])*mu_old, psi_old), 1, function(x){
           x[1]*x[-1]
         }
         ))
@@ -109,38 +117,29 @@ while(EM_iter < 30){
       }))
       
       # Now we are calculating the inverse of C_i
-      diag_paste <- function(A, B){
-        if(!is.null(A)){
-          rbind(cbind(A, matrix(0, dim(A)[1], dim(B)[2])), cbind(matrix(0, dim(B)[1], dim(A)[2]), B))
-        } else {
-          return(B)
-        }
-      }
       DD_inv <- NULL
-      DD <- NULL
       B <- NULL
       m1_i <- h_i
       for (j in 1:J[i]){
         DD_inv <- diag_paste(DD_inv, solve(matrix(G_i[j,],Kw, Kw)))
-        DD <- diag_paste(DD, matrix(G_i[j,],Kw, Kw))
         B <- cbind(B, matrix(B_i[j,], Kb, Kw))  
         m1_i <- c(m1_i, g_i[j,])
       }
       Cinv_tl <- solve(H_i- B %*% DD_inv %*% t(B))
       Cinv_tr <- -Cinv_tl%*%B%*%DD_inv
-      Cinv_br <- DD_inv + DD_inv%*%t(B)%*%Cinv_tl%*%B%*%DD
+      Cinv_br <- DD_inv - DD_inv%*%t(B)%*%Cinv_tr
       m_i <- rbind(cbind(Cinv_tl, Cinv_tr), cbind(t(Cinv_tr),Cinv_br)) %*% matrix(m1_i, length(m1_i),1)
       
       # Step 3: Updating xi_i
-      if(e_step_rep==1){
+      if(e_step_rep!=2){
         VVi <- Cinv_tl + m_i[1:Kb] %o% m_i[1:Kb]
         for (j in 1:J[i]){
           j_index <- (Kw*(j-1)+1):(Kw*j)
           UUij <- Cinv_br[j_index,j_index] + m_i[Kb+j_index] %o% m_i[Kb+j_index]
           UVij <- Cinv_tr[, j_index] + m_i[1:Kb] %o% m_i[Kb+j_index]
           xi_i[j,] <- (diag(theta_old %*% VVi %*% t(theta_old)) + diag(psi_old %*% UUij %*% t(psi_old)) + 
-                         2* diag(theta_old %*% UVij %*% t(psi_old)) + c(2*mu_old*theta_old%*%matrix(m_i[1:Kb],Kb,1)) + 
-                         c(2* mu_old * psi_old %*% matrix(m_i[Kb+j_index], Kw, 1)) + mu_old^2)^.5
+                         2* diag(theta_old %*% UVij %*% t(psi_old)) + c(2*mu_old*(theta_old%*%matrix(m_i[1:Kb],Kb,1))) + 
+                         c(2* mu_old * (psi_old %*% matrix(m_i[Kb+j_index], Kw, 1))) + mu_old^2)^.5
         }
       } else {
         VVi <- Cinv_tl + m_i[1:Kb] %o% m_i[1:Kb]
@@ -149,9 +148,9 @@ while(EM_iter < 30){
           UUij <- Cinv_br[j_index,j_index] + m_i[Kb+j_index] %o% m_i[Kb+j_index]
           UVij <- Cinv_tr[, j_index] + m_i[1:Kb] %o% m_i[Kb+j_index]
           xi_i[j,] <- (diag(theta_old %*% VVi %*% t(theta_old)) + diag(psi_old %*% UUij %*% t(psi_old)) + 
-                         2* diag(theta_old %*% UVij %*% t(psi_old)) + c(2*mu_old*theta_old%*%matrix(m_i[1:Kb],Kb,1)) + 
-                         c(2* mu_old * psi_old %*% matrix(m_i[Kb+j_index], Kw, 1)) + mu_old^2)^.5
-          curr_mat <- rbind(cbind(UUij, UVij, m_i[1:Kb]), cbind(UVij, VVi, m_i[Kb+j_index]), c(m_i[Kb+j_index], m_i[1:Kb], 1))
+                         2* diag(theta_old %*% UVij %*% t(psi_old)) + c(2*mu_old*(theta_old%*%matrix(m_i[1:Kb],Kb,1))) + 
+                         c(2* mu_old * (psi_old %*% matrix(m_i[Kb+j_index], Kw, 1))) + mu_old^2)^.5
+          curr_mat <- rbind(cbind(UUij, UVij, m_i[Kb+j_index]), cbind(UVij, VVi, m_i[1:Kb]), c(m_i[Kb+j_index], m_i[1:Kb], 1))
           curr_mat_D <- c(curr_mat) %o% lambda_f(xi_i[j,])
           curr_vec <- curr_mat[,Kb+Kw+1]
           curr_vec_D <- curr_vec %o% (X_i[j,]-0.5)
@@ -159,6 +158,7 @@ while(EM_iter < 30){
           T2 <- T2 + curr_vec_D
         }
       }
+      xi[Ji,] <- xi_i
     }
   }
   
