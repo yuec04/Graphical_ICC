@@ -150,7 +150,7 @@ MBPCA <- function(X, J, k_between=2, k_within=2, n_iter=30){
 #   The core algorithm finished! Now extract the results
   mu_est_expand <- matrix(rep(mu_new, each=sum(J)), sum(J), D)
   V_est_expand <- t(matrix(unlist(apply(cbind(post[,1:Kb],J), 1, function(x){
-    matrix(rep(x[1:K1], times=x[K1+1]),K1,x[K1+1])
+    matrix(rep(x[1:Kb], times=x[Kb+1]),Kb,x[Kb+1])
   })), Kb, sum(J)))
   U_est_expand <- NULL
   for(i in 1:I){
@@ -159,7 +159,7 @@ MBPCA <- function(X, J, k_between=2, k_within=2, n_iter=30){
   bet_est_expand <- V_est_expand %*% t(theta_new)
   wit_est_expand <- U_est_expand %*% t(psi_new)
   recon <- mu_est_expand + bet_est_expand + wit_est_expand
-  ICC <- sum(svd(theta_new)$d^2)/(sum(svd(theta_new)$d)^2+sum(svd(psi_new)$d^2))
+  ICC <- sum(svd(theta_new)$d^2)/(sum(svd(theta_new)$d^2)+sum(svd(psi_new)$d^2))
   BMPCA <- list(mu_est=mu_new, pc_between=theta_new, pc_within=psi_new, ICC=ICC, 
                 recon_map=recon, latent_u=post[,1:Kb], latent_v=post[,-c(1:Kb)])
 }
