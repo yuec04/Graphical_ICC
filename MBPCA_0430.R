@@ -2,7 +2,7 @@
 # 2/05/2014
 
 # Generate a test data
-D <- 100
+D <- 40
 
 # define the true mu
 mu_true <- rep(0, D)
@@ -24,7 +24,7 @@ psi_true <- cbind(psi1_true, psi2_true)
 # generate standard normal scores,
 # between subject score V: dimension is I by K1
 # within subject score U: dimension is (sum Ji) by K2
-I <- 500
+I <- 300
 set.seed(0822)
 J <- rep(2, I)
 V <- matrix(rnorm(I*K1), I, K1)
@@ -205,7 +205,14 @@ recon <- mu_est_expand + bet_est_expand + wit_est_expand
 # Plot the reconstruction probability versus the true probability
 
 library(ggplot2)
-
-qplot(c(latent), c(sigma_f(recon)), xlab='True Probability', 
-      ylab='Estimated probability', main='Simulation results', col=2
-      )
+plotDat <- data.frame(latent=c(latent), recon=c(sigma_f(recon)))
+plot(plotDat$latent, plotDat$recon)
+p1 <- ggplot(plotDat, aes(x=latent, y=recon))
+p1 <- p1 + layer(geom="point", colour='darkblue', alpha=0.3, size=1)
+p1 <- p1 + xlab('Latent Probability') + ylab('Reconstructed Probability') + ggtitle('Simulation Results')
+p1
+mu_new
+image(svd(theta_new)$u)
+image(svd(psi_new)$u)
+image(theta_true)
+image(psi_true)
