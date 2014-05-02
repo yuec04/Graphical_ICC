@@ -24,7 +24,7 @@ MBPCA <- function(X, J, k_between=2, k_within=2, n_iter=30){
   set.seed(0822)
   theta_old <- matrix(rnorm(D*Kb, 0, 1),D, Kb)
   psi_old <- matrix(rnorm(D*Kw, 0, 0.1), D, Kw)
-  xi <- matrix(rnorm(D*sum(J)), sum(J),D)
+  xi <- matrix(abs(rnorm(D*sum(J))), sum(J),D)
   EM_iter <- 0
   # some functions needed in the EM-algorithm
   diag_paste <- function(A, B){
@@ -59,7 +59,7 @@ MBPCA <- function(X, J, k_between=2, k_within=2, n_iter=30){
         B_i <- NULL
         g_i <- NULL
         for(j in 1:J[i]){
-          G_ij <- as.vector(diag(1,Kw))- 2*rowSums(apply(rbind(lambda_f(xi_i[j,]),t(theta_old)), 2, function(x){
+          G_ij <- as.vector(diag(1,Kw))- 2*rowSums(apply(rbind(lambda_f(xi_i[j,]),t(psi_old)), 2, function(x){
             as.vector(x[1]*x[-1]%o%x[-1])
           }))
           G_i <- rbind(G_i, G_ij)

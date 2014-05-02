@@ -1,5 +1,5 @@
 # MBPCA Project
-# 2/05/2014
+# 05/01/2014
 
 # Generate a test data
 D <- 40
@@ -62,7 +62,7 @@ if(nrow(X)!=sum(J)){
   cat('The dimension does not match!')
 }
 D <- ncol(X)
-Kb <- 2 # number of pc between
+Kb <- 3 # number of pc between
 Kw <- 2 # number of pc within
 
 # Step 1: Initialize
@@ -99,7 +99,7 @@ while(EM_iter < 30){
       B_i <- NULL
       g_i <- NULL
       for(j in 1:J[i]){
-        G_ij <- as.vector(diag(1,Kw))- 2*rowSums(apply(rbind(lambda_f(xi_i[j,]),t(theta_old)), 2, function(x){
+        G_ij <- as.vector(diag(1,Kw))- 2*rowSums(apply(rbind(lambda_f(xi_i[j,]),t(psi_old)), 2, function(x){
           as.vector(x[1]*x[-1]%o%x[-1])
         }))
         G_i <- rbind(G_i, G_ij)
@@ -216,3 +216,15 @@ image(svd(theta_new)$u)
 image(svd(psi_new)$u)
 image(theta_true)
 image(psi_true)
+
+# try the main function using the simulation data
+rm(list=ls())
+source('C:/Users/Chen/Documents/GitHub/Graphical_ICC/MBPCA.R')
+fit1 <- MBPCA(X,J,k_between=2, k_within=2, n_iter=30)
+library(ggplot2)
+plotDat <- data.frame(latent=c(latent), recon=c(sigma_f(fit1$recon_map)))
+# plot(plotDat$latent, plotDat$recon)
+p1 <- ggplot(plotDat, aes(x=latent, y=recon))
+p1 <- p1 + layer(geom="point", colour='darkblue', alpha=0.3, size=1)
+p1 <- p1 + xlab('Latent Probability') + ylab('Reconstructed Probability') + ggtitle('Simulation Results')
+p1
