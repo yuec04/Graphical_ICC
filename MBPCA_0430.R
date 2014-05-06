@@ -62,8 +62,8 @@ if(nrow(X)!=sum(J)){
   cat('The dimension does not match!')
 }
 D <- ncol(X)
-Kb <- 3 # number of pc between
-Kw <- 2 # number of pc within
+Kb <- 5 # number of pc between
+Kw <- 3 # number of pc within
 
 # Step 1: Initialize
 # initialize mu, theta, psi, xi
@@ -178,8 +178,8 @@ while(EM_iter < 30){
   
   # get the error
   error <- sum((mu_new-mu_old)^2)+sum((theta_new-theta_old)^2) + sum((psi_new-psi_old)^2)
-  cat("EM Iteration No.",EM_iter,'.\n') 
-  cat("The current error is ", error, '.\n')
+  cat("EM Iteration No.",EM_iter,'./n') 
+  cat("The current error is ", error, './n')
   
   # Update the parameter estimate
   mu_old <- mu_new
@@ -228,3 +228,72 @@ p1 <- ggplot(plotDat, aes(x=latent, y=recon))
 p1 <- p1 + layer(geom="point", colour='darkblue', alpha=0.3, size=1)
 p1 <- p1 + xlab('Latent Probability') + ylab('Reconstructed Probability') + ggtitle('Simulation Results')
 p1
+
+# Check results
+load("C:/Users/Chen/Dropbox/Research/PCA_working_group/code/Result/MBPCA_AccDat.rda")
+names(fit)
+fit$ICC
+load('C:/Users/Chen/Dropbox/Research/PCA_working_group/code/Data_Jiawei/NewDataNewSub.RData')
+load("NewDataNewSub.RData")
+valid_id <- NULL
+for(i in 1:dim(ActivityCount)[1]){
+  if(sum(is.na(ActivityCount[i,]))==0){
+    valid_id <- c(valid_id, i)
+  }
+}
+
+Count_Valid <- ActivityCount[valid_id,]
+Info_Valid <- SubjectInfo[valid_id,]
+J <- table(Info_Valid$BLSA_id)
+valid_id <- NULL
+for(i in 1:dim(ActivityCount)[1]){
+  if((sum(is.na(ActivityCount[i,]))==0)&(!(as.character(SubjectInfo$BLSA_id[i]) %in% names(which(J==1))))){
+    valid_id <- c(valid_id, i)
+  }
+}
+Count_Valid <- ActivityCount[valid_id,]
+Info_Valid <- SubjectInfo[valid_id,]
+J <- table(Info_Valid$BLSA_id)
+Count_Valid[Count_Valid>0] <- 1
+
+dim(fit$recon)
+plotDat <- data.frame(timeD=(1:1440)/1440, datD=fit$recon[1,], trueD=Count_Valid[1,])
+p1 <- ggplot(plotDat, aes(x=timeD))
+p1 <- p1 + geom_line(aes(y=datD), colour='darkblue', size=0.5)
+p1 <- p1 + geom_line(aes(y=trueD), colour='black', size=0.5)
+p1
+
+dim(fit$pc_between)
+pb=svd(fit$pc_between)
+matplot(pb$u, type='l')
+plot(fit$mu)
+matplot(svd(fit$pc_within)$u, type='l')
+
+rm(list=ls())
+load("C:/Users/Chen/Dropbox/Research/PCA_working_group/code/Result/MBPCA_K21.rda")
+fit1$ICC
+dim(fit1$pc_between)
+svd(fit1$pc_between)$d
+svd(fit1$pc_within)$d
+
+load("C:/Users/Chen/Dropbox/Research/PCA_working_group/code/Data_Kirby21/adj_proc_xc_rest_sfnfwav_craddock_0128.Rdata")
+
+# The third data is not good
+preDat <- graphs[-3,,,]
+
+node_pick <- 1:128
+pickDat <- preDat[,,node_pick, node_pick]
+XX <- NULL
+for(i in 1:dim(preDat)[1]){
+  for(j in 1:2){
+    currMat <- pickDat[i,j,,]
+    XX <- rbind(XX, currMat[lower.tri(currMat)])
+  }
+}
+
+dim(XX)
+sigma_f <- function(x){
+  (1+exp(-x))^(-1)
+}
+
+plot(c(abs(XX)), sigma_f(c(fit1$recon)), pch=19, cex=0.1)

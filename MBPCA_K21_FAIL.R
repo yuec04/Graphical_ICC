@@ -27,6 +27,7 @@ sigma_f <- function(x){
   (1+exp(-x))^(-1)
 }
 plotDat <- data.frame(latent=c(abs(XX)), recon=c(sigma_f(fit1$recon_map)))
+
 # dim(svd(fit1$pc_between)$u)
 p1 <- ggplot(plotDat, aes(x=latent, y=recon))
 p1 <- p1 + layer(geom="point", colour='darkblue', alpha=0.3, size=1.5)
